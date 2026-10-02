@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace Lieve.Pdf;
+namespace LumePDF.Pdf;
 
 // Raw bindings to pdfium.dll (Google PDFium, as packaged by bblanchon/pdfium-binaries).
 // PDFium is not thread-safe: every call must go through PdfWorker.

@@ -7,9 +7,9 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using static Lieve.Pdf.Pdfium;
+using static LumePDF.Pdf.Pdfium;
 
-namespace Lieve.Pdf;
+namespace LumePDF.Pdf;
 
 public sealed class PdfPasswordException : Exception;
 

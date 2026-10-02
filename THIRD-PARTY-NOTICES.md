@@ -1,6 +1,6 @@
 # Third-party notices
 
-Lieve ships with, or depends on, the following components.
+LumePDF ships with, or depends on, the following components.
 
 | Component | Author | License | Source |
 |---|---|---|---|

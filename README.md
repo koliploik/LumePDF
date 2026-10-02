@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="docs/icon.png" width="96" alt="Lieve">
+  <img src="docs/icon.png" width="96" alt="LumePDF">
 </p>
 
-<h1 align="center">Lieve</h1>
+<h1 align="center">LumePDF</h1>
 
 <p align="center">
   Un lettore PDF leggero, moderno e senza fronzoli per Windows 11.<br>
@@ -13,13 +13,13 @@
   <a href="../../releases/latest"><b>Scarica l'ultima versione</b></a>
 </p>
 
-![Lieve](docs/screenshot.png)
+![LumePDF](docs/screenshot.png)
 
 ## Perché
 
 Adobe Acrobat Reader è pesante e pieno di pubblicità e inviti all'abbonamento. Le alternative
 leggere (SumatraPDF) hanno un'interfaccia datata, quelle moderne sono spesso closed source o
-spingono versioni a pagamento. Lieve fa una cosa sola, leggere PDF, con l'interfaccia nativa di
+spingono versioni a pagamento. LumePDF fa una cosa sola, leggere PDF, con l'interfaccia nativa di
 Windows 11 e usando solo componenti di fonte autorevole:
 
 - **PDFium**, il motore PDF di Google Chrome, per il rendering e la ricerca nel testo;
@@ -45,12 +45,12 @@ Tutto il resto (circa 1.700 righe di C#) è in questo repository e si legge in u
 
 ## Installazione
 
-1. Scarica `Lieve-win-x64.zip` (o `Lieve-win-arm64.zip` per PC ARM) dalla
+1. Scarica `LumePDF-win-x64.zip` (o `LumePDF-win-arm64.zip` per PC ARM) dalla
    [pagina delle release](../../releases/latest) ed estrailo dove preferisci, ad esempio in
-   `%LOCALAPPDATA%\Programs\Lieve`.
-2. Avvia `Lieve.exe`.
+   `%LOCALAPPDATA%\Programs\LumePDF`.
+2. Avvia `LumePDF.exe`.
 
-Lieve usa il **Windows App Runtime 1.8**, un componente Microsoft condiviso che molte app
+LumePDF usa il **Windows App Runtime 1.8**, un componente Microsoft condiviso che molte app
 hanno già installato. Se manca, all'avvio Windows propone di scaricarlo; in alternativa:
 
 ```bash
@@ -61,19 +61,19 @@ Non serve altro: niente .NET da installare, niente diritti di amministratore.
 
 ### Usarlo come lettore PDF predefinito
 
-Dalla cartella di Lieve esegui:
+Dalla cartella di LumePDF esegui:
 
 ```bash
 powershell -ExecutionPolicy Bypass -File .\register.ps1
 ```
 
-Lo script registra Lieve solo per il tuo utente (scrive in `HKEY_CURRENT_USER`, non tocca il
-sistema) e apre **Impostazioni › App › App predefinite**, dove basta scegliere Lieve per i
+Lo script registra LumePDF solo per il tuo utente (scrive in `HKEY_CURRENT_USER`, non tocca il
+sistema) e apre **Impostazioni › App › App predefinite**, dove basta scegliere LumePDF per i
 file `.pdf`. Windows 11 non permette a nessun programma di impostarsi da solo come predefinito,
 quest'ultimo passaggio è per forza manuale. Per annullare: `.\register.ps1 -Unregister`.
 
 In alternativa: tasto destro su un PDF › *Apri con* › *Scegli un'altra app* › *Cerca un'app
-nel PC* › `Lieve.exe`.
+nel PC* › `LumePDF.exe`.
 
 ## Scorciatoie da tastiera
 
@@ -95,17 +95,17 @@ nel PC* › `Lieve.exe`.
 ## Riga di comando
 
 ```bash
-Lieve.exe "documento.pdf" --page 12 --search "parola"
+LumePDF.exe "documento.pdf" --page 12 --search "parola"
 ```
 
 `--page` apre alla pagina indicata (partendo da 1), `--search` avvia subito una ricerca.
 
 ## Privacy e sicurezza
 
-- **Nessuna connessione di rete.** Il codice di Lieve non contiene richieste di rete, e PDFium
+- **Nessuna connessione di rete.** Il codice di LumePDF non contiene richieste di rete, e PDFium
   è compilato senza JavaScript (V8) e senza XFA: i PDF non possono eseguire codice.
 - **Nessuna telemetria**, nessun account, nessun aggiornamento automatico.
-- Gli unici file che Lieve scrive sono in `%LOCALAPPDATA%\Lieve`: `recent.json` (ultimi file
+- Gli unici file che LumePDF scrive sono in `%LOCALAPPDATA%\LumePDF`: `recent.json` (ultimi file
   aperti, con pagina e zoom) e, solo in caso di errore imprevisto, `crash.log`.
   Cancellare la cartella azzera tutto.
 - I binari delle release sono compilati da GitHub Actions direttamente da questo codice
@@ -117,7 +117,7 @@ Lieve.exe "documento.pdf" --page 12 --search "parola"
 |---|---|---|
 | `pdfium.dll` | Google (PDFium) | binari precompilati da [bblanchon/pdfium-binaries](https://github.com/bblanchon/pdfium-binaries), il pacchetto NuGet più usato per PDFium, costruito in CI pubblica dal sorgente ufficiale di Google |
 | WinUI 3 / Windows App Runtime | Microsoft | runtime condiviso firmato Microsoft |
-| Runtime .NET (dentro `Lieve.exe`) | Microsoft / .NET Foundation | compilato in Native AOT |
+| Runtime .NET (dentro `LumePDF.exe`) | Microsoft / .NET Foundation | compilato in Native AOT |
 
 Licenze complete in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
@@ -127,7 +127,7 @@ Misurate su Windows 11, documento di prova di 120 pagine:
 
 | | |
 |---|---|
-| Dimensione installata | ~16 MB (`Lieve.exe` 7 MB + `pdfium.dll` 7 MB + risorse) |
+| Dimensione installata | ~16 MB (`LumePDF.exe` 7 MB + `pdfium.dll` 7 MB + risorse) |
 | Avvio a finestra visibile | ~0,4 s |
 | Memoria (working set) con documento aperto | ~130–150 MB |
 
@@ -137,7 +137,7 @@ lunghezza del documento.
 
 ## Limiti attuali
 
-Lieve è pensato per **leggere**. Per ora non fa:
+LumePDF è pensato per **leggere**. Per ora non fa:
 
 - selezione e copia del testo;
 - stampa;
@@ -159,10 +159,10 @@ Non serve Visual Studio completo.
 
 ```bash
 # Esegui in debug
-dotnet run --project src/Lieve
+dotnet run --project src/LumePDF
 
-# Build di rilascio, Native AOT (output in dist/Lieve)
-dotnet publish src/Lieve -c Release -r win-x64 -o dist/Lieve
+# Build di rilascio, Native AOT (output in dist/LumePDF)
+dotnet publish src/LumePDF -c Release -r win-x64 -o dist/LumePDF
 ```
 
 Ogni push su `main` viene compilato da GitHub Actions per x64 e ARM64; un tag `v*` crea
@@ -171,7 +171,7 @@ automaticamente una release con gli zip.
 ### Struttura del codice
 
 ```
-src/Lieve/
+src/LumePDF/
 ├── App.xaml(.cs)            avvio, riga di comando, log degli errori
 ├── MainWindow.xaml(.cs)     interfaccia: barra, zoom, ricerca, indice, scorciatoie
 ├── Viewer/
@@ -181,7 +181,7 @@ src/Lieve/
 │   ├── Pdfium.cs            binding P/Invoke a pdfium.dll
 │   ├── PdfWorker.cs         thread dedicato: PDFium non è thread-safe
 │   └── PdfDocument.cs       apertura, rendering, ricerca, indice
-├── Recents.cs               file recenti (JSON in %LOCALAPPDATA%\Lieve)
+├── Recents.cs               file recenti (JSON in %LOCALAPPDATA%\LumePDF)
 └── WindowMinSize.cs         dimensione minima della finestra
 scripts/register.ps1         associazione ai file .pdf per l'utente corrente
 ```

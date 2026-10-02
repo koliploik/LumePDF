@@ -3,7 +3,7 @@ using System.IO;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 
-namespace Lieve;
+namespace LumePDF;
 
 public partial class App : Application
 {
@@ -27,7 +27,7 @@ public partial class App : Application
         _ = OpenFromCommandLineAsync(_window, Environment.GetCommandLineArgs());
     }
 
-    // Lieve.exe [file.pdf] [--page N] [--search "text"]
+    // LumePDF.exe [file.pdf] [--page N] [--search "text"]
     static async Task OpenFromCommandLineAsync(MainWindow window, string[] argv)
     {
         string? file = null, search = null;
@@ -52,7 +52,7 @@ public partial class App : Application
     {
         try
         {
-            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Lieve");
+            string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LumePDF");
             Directory.CreateDirectory(dir);
             File.AppendAllText(Path.Combine(dir, "crash.log"), $"{DateTime.Now:O}\n{ex}\n\n");
         }

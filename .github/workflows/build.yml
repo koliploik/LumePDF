@@ -31,25 +31,25 @@ jobs:
 
       - name: Publish (Native AOT)
         run: >
-          dotnet publish src/Lieve/Lieve.csproj
+          dotnet publish src/LumePDF/LumePDF.csproj
           -c Release
           -r win-${{ matrix.arch }}
           -p:Platform=${{ matrix.platform }}
-          -o out/Lieve
+          -o out/LumePDF
 
       - name: Package
         shell: pwsh
         run: |
-          Remove-Item out/Lieve/*.pdb -ErrorAction SilentlyContinue
-          Copy-Item scripts/register.ps1 out/Lieve/
-          Copy-Item LICENSE, THIRD-PARTY-NOTICES.md out/Lieve/
-          Compress-Archive -Path out/Lieve -DestinationPath "Lieve-win-${{ matrix.arch }}.zip"
-          Get-ChildItem out/Lieve | Format-Table Name, Length
+          Remove-Item out/LumePDF/*.pdb -ErrorAction SilentlyContinue
+          Copy-Item scripts/register.ps1 out/LumePDF/
+          Copy-Item LICENSE, THIRD-PARTY-NOTICES.md out/LumePDF/
+          Compress-Archive -Path out/LumePDF -DestinationPath "LumePDF-win-${{ matrix.arch }}.zip"
+          Get-ChildItem out/LumePDF | Format-Table Name, Length
 
       - uses: actions/upload-artifact@v7
         with:
-          name: Lieve-win-${{ matrix.arch }}
-          path: Lieve-win-${{ matrix.arch }}.zip
+          name: LumePDF-win-${{ matrix.arch }}
+          path: LumePDF-win-${{ matrix.arch }}.zip
 
   release:
     name: Release
@@ -70,5 +70,5 @@ jobs:
           sha256sum *.zip > SHA256SUMS.txt
           gh release create "$GITHUB_REF_NAME" *.zip SHA256SUMS.txt \
             --repo "$GITHUB_REPOSITORY" \
-            --title "Lieve $GITHUB_REF_NAME" \
+            --title "LumePDF $GITHUB_REF_NAME" \
             --generate-notes

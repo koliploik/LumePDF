@@ -4,10 +4,10 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.22000.0</TargetPlatformMinVersion>
-    <RootNamespace>Lieve</RootNamespace>
-    <AssemblyName>Lieve</AssemblyName>
+    <RootNamespace>LumePDF</RootNamespace>
+    <AssemblyName>LumePDF</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationIcon>Assets\Lieve.ico</ApplicationIcon>
+    <ApplicationIcon>Assets\LumePDF.ico</ApplicationIcon>
     <Platforms>x64;ARM64</Platforms>
     <Platform Condition="'$(Platform)' == '' Or '$(Platform)' == 'AnyCPU'">x64</Platform>
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
@@ -19,7 +19,7 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <SatelliteResourceLanguages>it;en</SatelliteResourceLanguages>
     <Version>0.1.0</Version>
-    <Product>Lieve</Product>
+    <Product>LumePDF</Product>
     <Description>Lettore PDF leggero</Description>
   </PropertyGroup>
 
@@ -38,16 +38,16 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="Assets\Lieve.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets\LumePDF.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- Unpackaged publish leaves out the compiled XAML (.xbf) and resource index (.pri),
        without which the window fails to load. -->
   <Target Name="CopyXamlResourcesToPublish" AfterTargets="Publish">
     <ItemGroup>
-      <_LieveXamlOutput Include="$(OutDir)*.xbf;$(OutDir)$(TargetName).pri" />
+      <_LumePDFXamlOutput Include="$(OutDir)*.xbf;$(OutDir)$(TargetName).pri" />
     </ItemGroup>
-    <Copy SourceFiles="@(_LieveXamlOutput)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(_LumePDFXamlOutput)" DestinationFolder="$(PublishDir)" SkipUnchangedFiles="true" />
   </Target>
 
 </Project>

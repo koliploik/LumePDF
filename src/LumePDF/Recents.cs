@@ -5,7 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace Lieve;
+namespace LumePDF;
 
 public sealed partial class RecentFile
 {
@@ -23,12 +23,12 @@ public sealed partial class RecentFile
 [JsonSourceGenerationOptions(WriteIndented = true)]
 internal partial class RecentJson : JsonSerializerContext;
 
-/// <summary>Recently opened files with their last page and zoom, in %LOCALAPPDATA%\Lieve.</summary>
+/// <summary>Recently opened files with their last page and zoom, in %LOCALAPPDATA%\LumePDF.</summary>
 public static class Recents
 {
     const int Max = 20;
     static readonly string FilePath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Lieve", "recent.json");
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LumePDF", "recent.json");
 
     static List<RecentFile>? _items;
 

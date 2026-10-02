@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace Lieve;
+namespace LumePDF;
 
 /// <summary>
 /// Enforces a minimum window size through WM_GETMINMAXINFO. OverlappedPresenter's

@@ -5,7 +5,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 
-namespace Lieve.Viewer;
+namespace LumePDF.Viewer;
 
 /// <summary>One page on screen: the rendered bitmap plus a canvas for search highlights.</summary>
 public sealed partial class PageView : Grid

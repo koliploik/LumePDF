@@ -6,8 +6,8 @@ using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading;
 using System.Threading.Tasks;
-using Lieve.Pdf;
-using Lieve.Viewer;
+using LumePDF.Pdf;
+using LumePDF.Viewer;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -22,7 +22,7 @@ using Windows.Storage;
 using Windows.System;
 using Windows.UI;
 
-namespace Lieve;
+namespace LumePDF;
 
 public sealed partial class MainWindow : Window
 {
@@ -68,7 +68,7 @@ public sealed partial class MainWindow : Window
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(DragRegion);
         AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Tall;
-        AppWindow.SetIcon(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "Lieve.ico"));
+        AppWindow.SetIcon(System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "LumePDF.ico"));
         AppWindow.TitleBar.ButtonBackgroundColor = Colors.Transparent;
         AppWindow.TitleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
         WindowMinSize.Apply(WinRT.Interop.WindowNative.GetWindowHandle(this), 680, 400);
@@ -233,7 +233,7 @@ public sealed partial class MainWindow : Window
         _zoom = recent?.Zoom ?? 1;
 
         string name = System.IO.Path.GetFileName(path);
-        Title = $"{name} – Lieve";
+        Title = $"{name} – LumePDF";
         TitleText.Text = name;
         PageCountText.Text = $"/ {doc.PageCount}";
         Welcome.Visibility = Visibility.Collapsed;
@@ -850,8 +850,8 @@ public sealed partial class MainWindow : Window
         Add(VirtualKey.W, Ctrl, () =>
         {
             CloseDocument();
-            Title = "Lieve";
-            TitleText.Text = "Lieve";
+            Title = "LumePDF";
+            TitleText.Text = "LumePDF";
             Scroller.Visibility = Visibility.Collapsed;
             DocTools.Visibility = Visibility.Collapsed;
             ShowWelcome();

@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Lieve.Pdf;
+namespace LumePDF.Pdf;
 
 // PDFium is single-threaded, so all native calls are serialized on one background thread.
 // Work items are small (one page render, one page search) so the UI stays responsive

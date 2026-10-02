@@ -4,7 +4,7 @@ using System.Collections.Specialized;
 using Microsoft.UI.Xaml.Controls;
 using Windows.Foundation;
 
-namespace Lieve.Viewer;
+namespace LumePDF.Viewer;
 
 /// <summary>
 /// Vertical, centered, virtualizing layout for pages of known size. Unlike StackLayout it
