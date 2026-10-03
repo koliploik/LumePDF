@@ -61,7 +61,7 @@
             <StackPanel x:Name="DocTools" Grid.Column="2" Orientation="Horizontal" Spacing="4" Visibility="Collapsed">
                 <TextBox x:Name="SearchBox" AutomationProperties.Name="Cerca" Width="220" VerticalAlignment="Center" PlaceholderText="Cerca nel documento"
                          KeyDown="SearchBox_KeyDown" />
-                <TextBlock x:Name="SearchStatus" VerticalAlignment="Center" MinWidth="0" Margin="4,0"
+                <TextBlock x:Name="SearchStatus" VerticalAlignment="Center" Width="76" TextAlignment="Center"
                            Style="{StaticResource CaptionTextBlockStyle}"
                            Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 <Button x:Name="PrevHit" Style="{StaticResource HeaderButton}" Click="PrevHit_Click"
@@ -85,7 +85,7 @@
                 <Button x:Name="ZoomOutButton" Style="{StaticResource HeaderButton}" Click="ZoomOut_Click" ToolTipService.ToolTip="Riduci (Ctrl+-)" AutomationProperties.Name="Riduci">
                     <FontIcon Glyph="&#xE71F;" FontSize="16" />
                 </Button>
-                <DropDownButton x:Name="ZoomButton" AutomationProperties.Name="Zoom" VerticalAlignment="Center" MinWidth="76"
+                <DropDownButton x:Name="ZoomButton" AutomationProperties.Name="Zoom" VerticalAlignment="Center" Width="112"
                                 Background="Transparent" BorderBrush="Transparent">
                     <TextBlock x:Name="ZoomText" Text="100%" />
                     <DropDownButton.Flyout>

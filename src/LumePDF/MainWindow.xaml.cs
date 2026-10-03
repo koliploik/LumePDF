@@ -139,7 +139,6 @@ public sealed partial class MainWindow : Window
             return;
 
         SearchBox.Width = 240;
-        ZoomButton.MinWidth = 96;
         foreach (var e in new UIElement[] { ZoomOutButton, ZoomInButton, Sep1, Sep2, PageCountText, PrevHit, NextHit })
             e.Visibility = Visibility.Visible;
 
@@ -150,7 +149,7 @@ public sealed partial class MainWindow : Window
             () => SearchBox.Width = 170,
             () => Sep1.Visibility = Sep2.Visibility = Visibility.Collapsed,
             () => ZoomOutButton.Visibility = ZoomInButton.Visibility = Visibility.Collapsed,
-            () => { SearchBox.Width = 130; ZoomButton.MinWidth = 64; },
+            () => SearchBox.Width = 130,
             () => PageCountText.Visibility = Visibility.Collapsed,
             () => PrevHit.Visibility = NextHit.Visibility = Visibility.Collapsed,
             () => SearchBox.Width = 100,
