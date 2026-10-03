@@ -139,8 +139,11 @@ public sealed partial class MainWindow : Window
             return;
 
         SearchBox.Width = 240;
-        foreach (var e in new UIElement[] { ZoomOutButton, ZoomInButton, Sep1, Sep2, PageCountText, PrevHit, NextHit })
+        foreach (var e in new UIElement[] { ZoomOutButton, ZoomInButton, Sep1, Sep2, PageCountText })
             e.Visibility = Visibility.Visible;
+        // Counter and arrows only matter while searching; otherwise their room goes to the title.
+        var searching = _searchQuery.Length > 0 ? Visibility.Visible : Visibility.Collapsed;
+        SearchStatus.Visibility = PrevHit.Visibility = NextHit.Visibility = searching;
 
         double available = Root.ActualWidth - Header.Padding.Left - LeftTools.ActualWidth
             - CaptionSpace.Width.Value - 48 /* drag area */ - 3 * Header.ColumnSpacing;
@@ -676,7 +679,7 @@ public sealed partial class MainWindow : Window
         _searchRunning = true;
         var cts = _searchCts = new CancellationTokenSource();
         int startPage = _currentPage;
-        SearchStatus.Text = "Ricerca…";
+        UpdateSearchStatus();
 
         for (int i = 0; i < doc.PageCount; i++)
         {
