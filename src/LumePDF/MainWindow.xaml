@@ -128,11 +128,9 @@
                               HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Auto"
                               VerticalScrollBarVisibility="Auto" ZoomMode="Disabled"
                               ViewChanged="Scroller_ViewChanged" SizeChanged="Scroller_SizeChanged" KeyDown="Scroller_KeyDown">
-                    <!-- Right click; also shown on the start screen, where only "Apri" is left.
-                         Drawn inside the window: as a separate popup window, appearing under the
-                         still pointer, it showed the busy cursor until the mouse moved. -->
+                    <!-- Right click; also shown on the start screen, where only "Apri" is left. -->
                     <ScrollViewer.ContextFlyout>
-                        <MenuFlyout x:Name="ContextMenu" Opening="ContextMenu_Opening" ShouldConstrainToRootBounds="True">
+                        <MenuFlyout x:Name="ContextMenu" Opening="ContextMenu_Opening" Opened="ContextMenu_Opened">
                             <MenuFlyoutItem x:Name="CopyItem" Text="Copia" Tag="copy" KeyboardAcceleratorTextOverride="Ctrl+C" Click="ContextMenu_Click" />
                             <MenuFlyoutItem x:Name="SelectAllItem" Text="Seleziona tutto" Tag="all" KeyboardAcceleratorTextOverride="Ctrl+A" Click="ContextMenu_Click" />
                             <MenuFlyoutItem x:Name="FindItem" Text="Cerca…" Tag="find" KeyboardAcceleratorTextOverride="Ctrl+F" Click="ContextMenu_Click" />

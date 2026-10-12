@@ -1205,6 +1205,25 @@ public sealed partial class MainWindow : Window
         FindItem.Text = PageMenuState.FindLabel(_findTerm);
     }
 
+    // Opening a context flyout leaves WinUI showing the busy cursor until the mouse moves
+    // (microsoft-ui-xaml#8829, still open in Windows App SDK 1.8): put the arrow back right
+    // away, and once more after the menu has been laid out and drawn.
+    void ContextMenu_Opened(object? sender, object e)
+    {
+        ShowArrowCursor();
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, ShowArrowCursor);
+    }
+
+    static void ShowArrowCursor() => SetCursor(LoadCursorW(0, IDC_ARROW));
+
+    const nint IDC_ARROW = 32512;
+
+    [LibraryImport("user32.dll")]
+    private static partial nint LoadCursorW(nint instance, nint name);
+
+    [LibraryImport("user32.dll")]
+    private static partial nint SetCursor(nint cursor);
+
     void ContextMenu_Click(object sender, RoutedEventArgs e)
     {
         switch ((sender as MenuFlyoutItem)?.Tag as string)
