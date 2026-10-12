@@ -10,7 +10,6 @@ namespace LumePDF;
 public sealed partial class RecentFile
 {
     public string Path { get; set; } = "";
-    public int Page { get; set; }
     public double Zoom { get; set; } = 1;
     public int Fit { get; set; }
     public DateTime Opened { get; set; }
@@ -23,7 +22,10 @@ public sealed partial class RecentFile
 [JsonSourceGenerationOptions(WriteIndented = true)]
 internal partial class RecentJson : JsonSerializerContext;
 
-/// <summary>Recently opened files with their last page and zoom, in %LOCALAPPDATA%\LumePDF.</summary>
+/// <summary>
+/// Recently opened files with their zoom, in %LOCALAPPDATA%\LumePDF. Documents always open at
+/// their top, so the page is not kept (the "Page" of older files is ignored).
+/// </summary>
 public static class Recents
 {
     const int Max = 20;
@@ -53,11 +55,10 @@ public static class Recents
     public static RecentFile? Get(string path) =>
         Items.FirstOrDefault(r => string.Equals(r.Path, path, StringComparison.OrdinalIgnoreCase));
 
-    public static void Update(string path, int page, double zoom, int fit)
+    public static void Update(string path, double zoom, int fit)
     {
         var item = Get(path) ?? new RecentFile { Path = path };
         Items.Remove(item);
-        item.Page = page;
         item.Zoom = zoom;
         item.Fit = fit;
         item.Opened = DateTime.Now;

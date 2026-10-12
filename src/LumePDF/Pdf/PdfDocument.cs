@@ -221,6 +221,67 @@ public sealed unsafe partial class PdfDocument : IDisposable
             return hits;
         }, ct);
 
+    /// <summary>
+    /// The characters of a page in PDFium's order; with <paramref name="layout"/>, their boxes
+    /// too, for pointing and highlighting. Copying only needs the text.
+    /// </summary>
+    public Task<PageText> GetTextAsync(int index, bool layout, CancellationToken ct = default) =>
+        PdfWorker.Run(() =>
+        {
+            ct.ThrowIfCancellationRequested();
+            EnsureOpen();
+            nint page = FPDF_LoadPage(_doc, index);
+            if (page == 0)
+                return PageText.Empty;
+            nint text = FPDFText_LoadPage(page);
+            try
+            {
+                int n = text == 0 ? 0 : FPDFText_CountChars(text);
+                if (n <= 0)
+                    return PageText.Empty;
+                int rotation = FPDFPage_GetRotation(page) & 3;
+                var chars = new char[n];
+                var boxes = layout ? new NormRect[n] : [];
+                for (int i = 0; i < n; i++)
+                {
+                    uint c = FPDFText_GetUnicode(text, i);
+                    chars[i] = c <= 0xFFFF ? (char)c : '�';
+                    FsRectF r;
+                    if (layout && FPDFText_IsGenerated(text, i) != 1 && FPDFText_GetLooseCharBox(text, i, &r) != 0)
+                        boxes[i] = PageText.ToUpright(ToNormalized(page, r.Left, r.Top, r.Right, r.Bottom), rotation);
+                }
+                var (w, h) = PageSizes[index];
+                return new PageText(new string(chars), boxes, rotation, rotation % 2 == 0 ? h / w : w / h);
+            }
+            finally
+            {
+                if (text != 0)
+                    FPDFText_ClosePage(text);
+                FPDF_ClosePage(page);
+            }
+        }, ct);
+
+    /// <summary>Whether a page has any text at all; cheap, for telling scanned documents apart.</summary>
+    public Task<bool> HasTextAsync(int index, CancellationToken ct = default) =>
+        PdfWorker.Run(() =>
+        {
+            EnsureOpen();
+            nint page = FPDF_LoadPage(_doc, index);
+            if (page == 0)
+                return false;
+            nint text = FPDFText_LoadPage(page);
+            try
+            {
+                return text != 0 && FPDFText_CountChars(text) > 0;
+            }
+            finally
+            {
+                if (text != 0)
+                    FPDFText_ClosePage(text);
+                FPDF_ClosePage(page);
+            }
+        }, ct);
+
     static NormRect ToNormalized(nint page, double left, double top, double right, double bottom)
     {
         int x1, y1, x2, y2;

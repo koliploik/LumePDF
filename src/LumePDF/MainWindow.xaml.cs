@@ -3,12 +3,14 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading;
 using System.Threading.Tasks;
 using LumePDF.Pdf;
 using LumePDF.Viewer;
 using Microsoft.UI;
+using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -33,7 +35,8 @@ public sealed partial class MainWindow : Window
 
     enum FitMode { None = 0, Width = 1, Page = 2 }
 
-    readonly PageLayout _layout = new();
+    readonly PageGeometry _geometry = new();
+    readonly PageLayout _layout;
     readonly Dictionary<int, PageView> _realized = [];
     readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _rerenderTimer;
     readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _saveTimer;
@@ -44,6 +47,8 @@ public sealed partial class MainWindow : Window
     double _rasterScale = 1;
     int _currentPage;
     Size _fittedViewport;
+    // Page a just opened document starts at, until the viewport has a size to lay it out in.
+    int? _openAt;
     // Where our last ChangeView is heading; ScrollViewer offsets lag until the view settles.
     double? _pendingY;
     double? _pendingX;
@@ -59,11 +64,29 @@ public sealed partial class MainWindow : Window
     readonly Dictionary<int, List<int>> _hitsByPage = [];
     int _currentHit = -1;
 
+    // Text selection state
+    readonly TextSelection _selection = new();
+    // Text layers of the pages around the view, loaded on demand.
+    readonly Dictionary<int, Task<PageText>> _texts = [];
+    readonly ClickCounter _clicks = new();
+    readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _autoScrollTimer;
+    SolidColorBrush? _selectionBrush;
+    InputCursor? _textCursor;
+    bool _selecting;     // left button held over the pages
+    bool _anchored;      // the press that started it has found its text
+    int _selectUnit = 1; // 1 characters, 2 words, 3 lines
+    int _pressId;
+    Point _dragPoint;    // pointer while selecting, in viewport coordinates
+    bool? _hasText;      // whether the document has any text; null until known
+    CancellationTokenSource? _textScanCts;
+    string? _findTerm;
+
     readonly Dictionary<TreeViewNode, int> _outlinePages = [];
 
     public MainWindow()
     {
         InitializeComponent();
+        _layout = new PageLayout(_geometry);
 
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(DragRegion);
@@ -90,6 +113,12 @@ public sealed partial class MainWindow : Window
         _saveTimer.IsRepeating = false;
         _saveTimer.Tick += (_, _) => SaveRecent();
 
+        _autoScrollTimer = DispatcherQueue.CreateTimer();
+        _autoScrollTimer.Interval = TimeSpan.FromMilliseconds(16);
+        _autoScrollTimer.IsRepeating = true;
+        _autoScrollTimer.Tick += (_, _) => AutoScroll();
+
+        Welcome.ContextFlyout = ContextMenu;
         Root.Loaded += Root_Loaded;
         Root.SizeChanged += (_, _) => AdaptHeader();
         Root.ActualThemeChanged += (_, _) => UpdateCaptionColors();
@@ -97,6 +126,7 @@ public sealed partial class MainWindow : Window
         {
             SaveRecent();
             _searchCts?.Cancel();
+            _textScanCts?.Cancel();
             _doc?.Dispose();
         };
 
@@ -186,8 +216,8 @@ public sealed partial class MainWindow : Window
 
     // ───────────────────────────── Opening ─────────────────────────────
 
-    /// <param name="page">Zero-based page to show; negative restores the last position.</param>
-    public async Task OpenFileAsync(string path, string? password = null, int page = -1)
+    /// <param name="page">Zero-based page to show (--page); otherwise the document opens at its very top.</param>
+    public async Task OpenFileAsync(string path, string? password = null, int page = 0)
     {
         try
         {
@@ -230,6 +260,7 @@ public sealed partial class MainWindow : Window
         CloseDocument();
         _doc = doc;
 
+        // Only the zoom is remembered per file: the reading position is not.
         var recent = Recents.Get(path);
         _fit = recent != null ? (FitMode)recent.Fit : FitMode.Width;
         _zoom = recent?.Zoom ?? 1;
@@ -242,18 +273,35 @@ public sealed partial class MainWindow : Window
         Scroller.Visibility = Visibility.Visible;
         DocTools.Visibility = Visibility.Visible;
         AdaptHeader();
-        Scroller.UpdateLayout();
-        _layout.SetViewportWidth(Scroller.ActualWidth);
 
-        ApplyLayout();
-        Pages.ItemsSource = Enumerable.Range(0, doc.PageCount).ToList();
+        // Right after launch the window may not have been laid out yet. Fitting the zoom to a
+        // viewport of size zero, then re-fitting around the middle of that view once the real
+        // size arrived, used to open documents several pages down: lay out only a sized viewport.
+        _openAt = Math.Clamp(page, 0, Math.Max(0, doc.PageCount - 1));
         Scroller.UpdateLayout();
-        GoToPage(Math.Clamp(page >= 0 ? page : recent?.Page ?? 0, 0, doc.PageCount - 1));
-        UpdatePageIndicator();
-        SaveRecent();
+        if (Scroller.ActualWidth > 0 && Scroller.ActualHeight > 0)
+            ShowDocument();
         Scroller.Focus(FocusState.Programmatic);
 
+        _ = DetectTextAsync(doc);
         await LoadOutlineAsync(doc);
+    }
+
+    /// <summary>Lays out the opened document and scrolls to where it starts.</summary>
+    void ShowDocument()
+    {
+        if (_doc == null || _openAt is not int page)
+            return;
+        _openAt = null;
+        _layout.SetViewportWidth(Scroller.ActualWidth);
+        ApplyLayout();
+        Pages.ItemsSource = Enumerable.Range(0, _doc.PageCount).ToList();
+        Scroller.UpdateLayout();
+        var (x, y) = _geometry.OpeningOffset(page);
+        ScrollTo(x, y);
+        _currentPage = page;
+        UpdatePageIndicator();
+        SaveRecent();
     }
 
     void CloseDocument()
@@ -262,10 +310,21 @@ public sealed partial class MainWindow : Window
             return;
         SaveRecent();
         ClearSearch();
+        _textScanCts?.Cancel();
+        _hasText = null;
+        EndSelecting();
+        _selection.Clear();
+        _texts.Clear();
         Pages.ItemsSource = null;
         _realized.Clear();
         _doc.Dispose();
         _doc = null;
+        // Nothing of this document's view may carry over to the next one.
+        _layout.SetSizes([], 1);
+        _openAt = null;
+        _currentPage = 0;
+        _pendingX = _pendingY = null;
+        _scrollDeferred = false;
         OutlineTree.RootNodes.Clear();
         _outlinePages.Clear();
         OutlineToggle.Visibility = Visibility.Collapsed;
@@ -284,7 +343,7 @@ public sealed partial class MainWindow : Window
     void SaveRecent()
     {
         if (_doc != null)
-            Recents.Update(_doc.FilePath, _currentPage, _zoom, (int)_fit);
+            Recents.Update(_doc.FilePath, _zoom, (int)_fit);
     }
 
     async void Open_Click(object sender, RoutedEventArgs e) => await PickAndOpenAsync();
@@ -333,6 +392,7 @@ public sealed partial class MainWindow : Window
         view.Index = args.Index;
         _realized[args.Index] = view;
         DrawHighlights(view);
+        DrawSelection(view);
         RequestRender(view);
     }
 
@@ -346,8 +406,8 @@ public sealed partial class MainWindow : Window
 
     (int Width, int Height) TargetPixels(int index)
     {
-        double w = _layout.WidthOf(index) * _rasterScale;
-        double h = _layout.HeightOf(index) * _rasterScale;
+        double w = _geometry.WidthOf(index) * _rasterScale;
+        double h = _geometry.HeightOf(index) * _rasterScale;
         double area = w * h;
         if (area > MaxRenderPixels)
         {
@@ -360,7 +420,7 @@ public sealed partial class MainWindow : Window
 
     void RequestRender(PageView view)
     {
-        if (_doc == null || view.Index < 0 || view.Index >= _layout.Count)
+        if (_doc == null || view.Index < 0 || view.Index >= _geometry.Count)
             return;
         view.RenderCts?.Cancel();
         var cts = view.RenderCts = new CancellationTokenSource();
@@ -411,8 +471,8 @@ public sealed partial class MainWindow : Window
     {
         if (_doc == null)
             return 1;
-        double viewW = Math.Max(1, Scroller.ActualWidth - 2 * PageLayout.Padding - 1);
-        double viewH = Math.Max(1, Scroller.ActualHeight - 2 * PageLayout.Padding);
+        double viewW = Math.Max(1, Scroller.ActualWidth - 2 * PageGeometry.Padding - 1);
+        double viewH = Math.Max(1, Scroller.ActualHeight - 2 * PageGeometry.Padding);
         double fitW = viewW / (_doc.TypicalPageWidth * PointsToDip);
         double zoom = _fit switch
         {
@@ -437,23 +497,23 @@ public sealed partial class MainWindow : Window
             _ => $"{Math.Round(_zoom * 100)}%",
         };
         foreach (var view in _realized.Values)
+        {
             DrawHighlights(view);
+            DrawSelection(view);
+        }
         _rerenderTimer.Stop();
         _rerenderTimer.Start();
     }
 
     /// <summary>Changes zoom keeping the content under <paramref name="anchor"/> (viewport coords) still.</summary>
-    void SetZoom(FitMode fit, double zoom, Point? anchor = null)
+    /// <param name="keepTop">For re-fitting to a new window size: a view resting at the top stays there.</param>
+    void SetZoom(FitMode fit, double zoom, Point? anchor = null, bool keepTop = false)
     {
-        if (_doc == null || _layout.Count == 0)
+        if (_doc == null || _geometry.Count == 0)
             return;
 
         var a = anchor ?? new Point(Scroller.ViewportWidth / 2, Scroller.ViewportHeight / 2);
-        double contentY = CurrentY + a.Y;
-        int page = Math.Max(0, _layout.IndexAt(contentY));
-        double fy = (contentY - _layout.TopOf(page)) / _layout.HeightOf(page);
-        // Horizontal anchor relative to that page: pages narrower than the view stay centered.
-        double fx = (Scroller.HorizontalOffset + a.X - _layout.LeftOf(page)) / _layout.WidthOf(page);
+        var keep = _geometry.AnchorAt(Scroller.HorizontalOffset, CurrentY, a.X, a.Y, keepTop);
 
         _fit = fit;
         _zoom = Math.Clamp(zoom, MinZoom, MaxZoom);
@@ -461,10 +521,8 @@ public sealed partial class MainWindow : Window
         Pages.InvalidateMeasure();
         Scroller.UpdateLayout();
 
-        double y = _layout.TopOf(page) + fy * _layout.HeightOf(page) - a.Y;
-        double x = _layout.LeftOf(page) + fx * _layout.WidthOf(page) - a.X;
-        x = Math.Clamp(x, 0, Math.Max(0, _layout.ExtentWidth - Scroller.ViewportWidth));
-        ScrollTo(x, Math.Max(0, y));
+        var (x, y) = _geometry.OffsetFor(keep, Scroller.ViewportWidth);
+        ScrollTo(x, y);
         _saveTimer.Stop();
         _saveTimer.Start();
     }
@@ -506,19 +564,25 @@ public sealed partial class MainWindow : Window
         ScrollContent.MinWidth = e.NewSize.Width;
         ScrollContent.MinHeight = e.NewSize.Height;
         _layout.SetViewportWidth(e.NewSize.Width);
+        if (_openAt != null)
+        {
+            // A document opened before the window had a size: now there is one to lay it out in.
+            if (e.NewSize.Width > 0 && e.NewSize.Height > 0)
+                DispatcherQueue.TryEnqueue(ShowDocument);
+            return;
+        }
         if (_doc != null && _fit != FitMode.None && e.NewSize != _fittedViewport)
-            SetZoom(_fit, _zoom);
+            SetZoom(_fit, _zoom, keepTop: true);
     }
 
     // ───────────────────────────── Navigation ─────────────────────────────
 
     void GoToPage(int index)
     {
-        if (_doc == null || _layout.Count == 0)
+        if (_doc == null || _geometry.Count == 0)
             return;
-        index = Math.Clamp(index, 0, _layout.Count - 1);
-        double y = index == 0 ? 0 : _layout.TopOf(index) - PageLayout.Spacing / 2;
-        ScrollTo(null, y);
+        index = Math.Clamp(index, 0, _geometry.Count - 1);
+        ScrollTo(null, _geometry.OffsetOf(index));
         _currentPage = index;
         UpdatePageIndicator();
     }
@@ -538,7 +602,7 @@ public sealed partial class MainWindow : Window
         Scroller.ChangeView(x, y, null, true);
     }
 
-    double MaxScrollY => Math.Max(0, _layout.ContentHeight - Scroller.ViewportHeight);
+    double MaxScrollY => Math.Max(0, _geometry.ContentHeight - Scroller.ViewportHeight);
 
     void Scroller_LayoutUpdated(object? sender, object e)
     {
@@ -556,19 +620,20 @@ public sealed partial class MainWindow : Window
         if (!e.IsIntermediate && !_scrollDeferred)
             _pendingY = null;
         UpdateCurrentPage();
+        // While selecting, the content moving under the pointer moves the end of the selection.
+        if (_selecting)
+            ExtendSelection();
     }
 
     void UpdateCurrentPage()
     {
-        if (_doc == null || _layout.Count == 0)
+        if (_doc == null || _geometry.Count == 0)
             return;
-        int page = Math.Max(0, _layout.IndexAt(CurrentY + Scroller.ViewportHeight * 0.35));
+        int page = Math.Max(0, _geometry.IndexAt(CurrentY + Scroller.ViewportHeight * 0.35));
         if (page != _currentPage)
         {
             _currentPage = page;
             UpdatePageIndicator();
-            _saveTimer.Stop();
-            _saveTimer.Start();
         }
     }
 
@@ -773,17 +838,19 @@ public sealed partial class MainWindow : Window
 
     void ScrollToHit(SearchHit hit)
     {
+        if (hit.Page >= _geometry.Count)
+            return; // not laid out yet (opened with --search before the window had a size)
         var r = hit.Rects[0];
-        double top = _layout.TopOf(hit.Page) + r.Y * _layout.HeightOf(hit.Page);
-        double bottom = top + r.Height * _layout.HeightOf(hit.Page);
+        double top = _geometry.TopOf(hit.Page) + r.Y * _geometry.HeightOf(hit.Page);
+        double bottom = top + r.Height * _geometry.HeightOf(hit.Page);
         double viewTop = CurrentY, viewBottom = viewTop + Scroller.ViewportHeight;
         double? y = top < viewTop + 24 || bottom > viewBottom - 24 ? top - Scroller.ViewportHeight / 3 : null;
 
         double? x = null;
         if (Scroller.ExtentWidth > Scroller.ViewportWidth)
         {
-            double left = _layout.LeftOf(hit.Page) + r.X * _layout.WidthOf(hit.Page);
-            double right = left + r.Width * _layout.WidthOf(hit.Page);
+            double left = _geometry.LeftOf(hit.Page) + r.X * _geometry.WidthOf(hit.Page);
+            double right = left + r.Width * _geometry.WidthOf(hit.Page);
             if (left < Scroller.HorizontalOffset || right > Scroller.HorizontalOffset + Scroller.ViewportWidth)
                 x = left - Scroller.ViewportWidth / 3;
         }
@@ -796,7 +863,7 @@ public sealed partial class MainWindow : Window
         view.Overlay.Children.Clear();
         if (view.Index < 0 || !_hitsByPage.TryGetValue(view.Index, out var indexes))
             return;
-        double w = _layout.WidthOf(view.Index), h = _layout.HeightOf(view.Index);
+        double w = _geometry.WidthOf(view.Index), h = _geometry.HeightOf(view.Index);
         foreach (int i in indexes)
         {
             var brush = i == _currentHit ? CurrentHitBrush : HitBrush;
@@ -817,6 +884,349 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    // ───────────────────────────── Text selection ─────────────────────────────
+
+    [LibraryImport("user32.dll")]
+    private static partial uint GetDoubleClickTime();
+
+    InputCursor TextCursor => _textCursor ??= InputSystemCursor.Create(InputSystemCursorShape.IBeam);
+
+    SolidColorBrush SelectionBrush => _selectionBrush ??= new SolidColorBrush(
+        Application.Current.Resources.TryGetValue("SystemAccentColor", out var c) && c is Color accent
+            ? Color.FromArgb(0x60, accent.R, accent.G, accent.B)
+            : Color.FromArgb(0x60, 0x00, 0x78, 0xD4));
+
+    /// <summary>The text layer of a page, read once and kept while the page is around.</summary>
+    Task<PageText> TextOf(int page)
+    {
+        if (!_texts.TryGetValue(page, out var task))
+        {
+            if (_texts.Count >= 16)
+                foreach (int old in _texts.Keys.Where(k => !_realized.ContainsKey(k)).ToList())
+                    _texts.Remove(old);
+            _texts[page] = task = LoadTextAsync(_doc!, page);
+        }
+        return task;
+    }
+
+    async Task<PageText> LoadTextAsync(PdfDocument doc, int page)
+    {
+        PageText text;
+        try
+        {
+            text = await doc.GetTextAsync(page, layout: true);
+        }
+        catch
+        {
+            text = PageText.Empty; // document closed, or a broken page: nothing to select
+        }
+        if (doc == _doc && text.HasText)
+            _hasText = true;
+        return text;
+    }
+
+    PageText? LoadedText(int page) =>
+        _texts.TryGetValue(page, out var task) && task.IsCompletedSuccessfully ? task.Result : null;
+
+    /// <summary>Finds out in the background whether the document has any text; "Seleziona tutto" depends on it.</summary>
+    async Task DetectTextAsync(PdfDocument doc)
+    {
+        var cts = _textScanCts = new CancellationTokenSource();
+        for (int i = 0; i < doc.PageCount && _hasText == null; i++)
+        {
+            bool found;
+            try
+            {
+                found = await doc.HasTextAsync(i, cts.Token);
+            }
+            catch
+            {
+                return;
+            }
+            if (cts.IsCancellationRequested || doc != _doc)
+                return;
+            if (found)
+                _hasText = true;
+        }
+        _hasText ??= false;
+    }
+
+    void ScrollContent_PointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        var point = e.GetCurrentPoint(ScrollContent);
+        // Touch and pen keep panning; the right button opens the menu and leaves the selection alone.
+        if (_doc == null || _geometry.Count == 0 || e.Pointer.PointerDeviceType != PointerDeviceType.Mouse
+            || !point.Properties.IsLeftButtonPressed)
+            return;
+
+        Scroller.Focus(FocusState.Pointer);
+        var hit = _geometry.PointAt(point.Position.X, point.Position.Y);
+        int clicks = _clicks.Press((long)(point.Timestamp / 1000), point.Position.X, point.Position.Y, GetDoubleClickTime(), 4);
+        bool extend = clicks == 1 && (e.KeyModifiers & VirtualKeyModifiers.Shift) != 0;
+        _selectUnit = clicks;
+        _selecting = ScrollContent.CapturePointer(e.Pointer);
+        _anchored = false;
+        _dragPoint = e.GetCurrentPoint(Scroller).Position;
+        ScrollContent.Cursor = TextCursor;
+        _ = BeginSelectionAsync(hit, extend, ++_pressId);
+        e.Handled = true;
+    }
+
+    async Task BeginSelectionAsync(PagePoint hit, bool extend, int press)
+    {
+        var doc = _doc;
+        var text = LoadedText(hit.Page) ?? await TextOf(hit.Page);
+        if (doc != _doc || press != _pressId)
+            return;
+        var (start, end) = UnitAt(hit, text);
+        if (extend)
+            _selection.ExtendTo(start, end);
+        else
+            _selection.Begin(start, end);
+        _anchored = true;
+        foreach (var view in _realized.Values)
+            DrawSelection(view);
+        ExtendSelection(); // the pointer may have moved while the text was loading
+    }
+
+    /// <summary>The character position, word or line (depending on the click count) under a point.</summary>
+    (TextPosition Start, TextPosition End) UnitAt(PagePoint hit, PageText text)
+    {
+        int caret = text.CaretAt(hit.X, hit.Y);
+        var (start, end) = (caret, caret);
+        if (_selectUnit > 1 && text.CharAt(hit.X, hit.Y) is int i and >= 0)
+            (start, end) = _selectUnit == 2 ? text.WordAt(i) : text.LineAt(i);
+        return (new(hit.Page, start), new(hit.Page, end));
+    }
+
+    void ExtendSelection()
+    {
+        if (!_selecting || !_anchored || _geometry.Count == 0)
+            return;
+        var hit = _geometry.PointAt(_dragPoint.X + Scroller.HorizontalOffset, _dragPoint.Y + CurrentY);
+        if (LoadedText(hit.Page) is not { } text)
+        {
+            _ = ExtendWhenLoadedAsync(hit.Page);
+            return;
+        }
+        var (start, end) = UnitAt(hit, text);
+        _selection.ExtendTo(start, end);
+        foreach (var view in _realized.Values)
+            DrawSelection(view);
+    }
+
+    async Task ExtendWhenLoadedAsync(int page)
+    {
+        var doc = _doc;
+        await TextOf(page);
+        if (doc == _doc)
+            ExtendSelection();
+    }
+
+    void ScrollContent_PointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (_doc == null || _geometry.Count == 0)
+            return;
+        if (_selecting)
+        {
+            _dragPoint = e.GetCurrentPoint(Scroller).Position;
+            ExtendSelection();
+            if (AutoScrollStep() != default)
+                _autoScrollTimer.Start();
+        }
+        else if (e.Pointer.PointerDeviceType == PointerDeviceType.Mouse)
+        {
+            UpdateTextCursor(e.GetCurrentPoint(ScrollContent).Position);
+        }
+    }
+
+    void ScrollContent_PointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_selecting)
+            return;
+        EndSelecting();
+        ScrollContent.ReleasePointerCapture(e.Pointer);
+        UpdateTextCursor(e.GetCurrentPoint(ScrollContent).Position);
+        e.Handled = true;
+    }
+
+    void ScrollContent_PointerCaptureLost(object sender, PointerRoutedEventArgs e) => EndSelecting();
+
+    void EndSelecting()
+    {
+        _selecting = false;
+        _autoScrollTimer.Stop();
+        ScrollContent.Cursor = null;
+    }
+
+    /// <summary>I-beam over text, arrow elsewhere, as in a browser.</summary>
+    void UpdateTextCursor(Point p)
+    {
+        var hit = _geometry.PointAt(p.X, p.Y);
+        if (hit.Page < 0 || !_realized.TryGetValue(hit.Page, out var view))
+            return;
+        if (LoadedText(hit.Page) is { } text)
+            view.Cursor = text.IsOverText(hit.X, hit.Y) ? TextCursor : null;
+        else
+            _ = TextOf(hit.Page); // ready by the next move
+    }
+
+    // Holding the pointer at or past an edge of the view while selecting scrolls toward it,
+    // faster the further out it is.
+    (double X, double Y) AutoScrollStep()
+    {
+        const double Edge = 8;
+        static double Speed(double beyond) => beyond <= 0 ? 0 : Math.Min(80, 4 + beyond / 2);
+        var p = _dragPoint;
+        double dy = Speed(p.Y - (Scroller.ViewportHeight - Edge)) - Speed(Edge - p.Y);
+        double dx = Scroller.ScrollableWidth > 0 ? Speed(p.X - (Scroller.ViewportWidth - Edge)) - Speed(Edge - p.X) : 0;
+        return (dx, dy);
+    }
+
+    void AutoScroll()
+    {
+        var (dx, dy) = AutoScrollStep();
+        if (!_selecting || (dx == 0 && dy == 0))
+        {
+            _autoScrollTimer.Stop();
+            return;
+        }
+        double? x = dx == 0 ? null : Math.Clamp(Scroller.HorizontalOffset + dx, 0, Scroller.ScrollableWidth);
+        ScrollTo(x, Math.Clamp(CurrentY + dy, 0, MaxScrollY));
+        ExtendSelection();
+    }
+
+    void DrawSelection(PageView view)
+    {
+        int page = view.Index;
+        if (page < 0 || _selection.IsEmpty || page < _selection.Start.Page || page > _selection.End.Page)
+        {
+            if (view.Selection.Children.Count > 0)
+                view.Selection.Children.Clear();
+            return;
+        }
+        if (LoadedText(page) is not { } text)
+        {
+            _ = RedrawSelectionWhenLoadedAsync(page);
+            return;
+        }
+        IReadOnlyList<NormRect> rects = _selection.RangeOn(page, text.Length) is (int start, int end) ? text.GetRects(start, end) : [];
+        view.ShowSelection(rects, _geometry.WidthOf(page), _geometry.HeightOf(page), SelectionBrush);
+    }
+
+    async Task RedrawSelectionWhenLoadedAsync(int page)
+    {
+        var doc = _doc;
+        await TextOf(page);
+        if (doc == _doc && _realized.TryGetValue(page, out var view))
+            DrawSelection(view);
+    }
+
+    void SelectAll()
+    {
+        if (_doc == null || _hasText == false)
+            return;
+        _selection.SelectAll(_doc.PageCount);
+        foreach (var view in _realized.Values)
+            DrawSelection(view);
+    }
+
+    /// <summary>The selected text if all of its pages are at hand; null otherwise.</summary>
+    string? SelectedTextIfLoaded()
+    {
+        if (_selection.IsEmpty)
+            return null;
+        var pages = new List<PageText>();
+        for (int page = _selection.Start.Page; page <= _selection.End.Page; page++)
+        {
+            if (LoadedText(page) is not { } text)
+                return null;
+            pages.Add(text);
+        }
+        return _selection.GetText(pages);
+    }
+
+    async void CopySelection()
+    {
+        var doc = _doc;
+        if (doc == null || _selection.IsEmpty)
+            return;
+        // The selection may change while far pages are read: copy the one that was asked for.
+        var selection = new TextSelection();
+        selection.Begin(_selection.Start, _selection.End);
+        var pages = new List<PageText>();
+        bool slow = selection.End.Page - selection.Start.Page > 20;
+        if (slow)
+            Busy.IsActive = true;
+        try
+        {
+            for (int page = selection.Start.Page; page <= selection.End.Page; page++)
+                pages.Add(LoadedText(page) ?? await doc.GetTextAsync(page, layout: false));
+        }
+        catch
+        {
+            return; // document closed meanwhile
+        }
+        finally
+        {
+            if (slow)
+                Busy.IsActive = false;
+        }
+        string text = selection.GetText(pages);
+        if (doc != _doc || text.Length == 0)
+            return;
+        try
+        {
+            var package = new DataPackage();
+            package.SetText(text);
+            Clipboard.SetContent(package);
+            Clipboard.Flush(); // keep it after LumePDF closes
+        }
+        catch
+        {
+            // Another program is holding the clipboard: nothing sensible to do.
+        }
+    }
+
+    // ───────────────────────────── Context menu ─────────────────────────────
+
+    void ContextMenu_Opening(object? sender, object e)
+    {
+        var state = new PageMenuState(_doc != null, _selection.HasText(LoadedText), _hasText,
+            CanZoomIn: _zoom < MaxZoom - 0.001, CanZoomOut: _zoom > MinZoom + 0.001);
+        foreach (var item in ContextMenu.Items)
+            if (item != OpenItem)
+                item.Visibility = state.ShowDocumentItems ? Visibility.Visible : Visibility.Collapsed;
+        CopyItem.IsEnabled = state.CanCopy;
+        SelectAllItem.IsEnabled = state.CanSelectAll;
+        ZoomInItem.IsEnabled = state.CanZoomIn;
+        ZoomOutItem.IsEnabled = state.CanZoomOut;
+        _findTerm = PageMenuState.SearchTerm(SelectedTextIfLoaded());
+        FindItem.Text = PageMenuState.FindLabel(_findTerm);
+    }
+
+    void ContextMenu_Click(object sender, RoutedEventArgs e)
+    {
+        switch ((sender as MenuFlyoutItem)?.Tag as string)
+        {
+            case "copy": CopySelection(); break;
+            case "all": SelectAll(); break;
+            case "find":
+                if (_findTerm != null)
+                    Search(_findTerm);
+                FocusSearch();
+                break;
+            case "in": ZoomStep(+1); break;
+            case "out": ZoomStep(-1); break;
+            case "w": SetZoom(FitMode.Width, _zoom); break;
+            case "p": SetZoom(FitMode.Page, _zoom); break;
+            case "first": GoToPage(0); break;
+            case "last": GoToPage(int.MaxValue); break;
+            case "page": FocusPageBox(); break;
+            case "open": _ = PickAndOpenAsync(); break;
+        }
+    }
+
     // ───────────────────────────── Shortcuts ─────────────────────────────
 
     void RegisterShortcuts()
@@ -826,20 +1236,12 @@ public sealed partial class MainWindow : Window
         const VirtualKeyModifiers None = VirtualKeyModifiers.None;
 
         Add(VirtualKey.O, Ctrl, () => _ = PickAndOpenAsync());
-        Add(VirtualKey.F, Ctrl, () =>
-        {
-            if (_doc == null) return;
-            SearchBox.Focus(FocusState.Keyboard);
-            SearchBox.SelectAll();
-        });
+        Add(VirtualKey.F, Ctrl, FocusSearch);
         Add(VirtualKey.F3, None, () => MoveHit(+1));
         Add(VirtualKey.F3, Shift, () => MoveHit(-1));
-        Add(VirtualKey.G, Ctrl, () =>
-        {
-            if (_doc == null) return;
-            PageBox.Focus(FocusState.Keyboard);
-            PageBox.SelectAll();
-        });
+        Add(VirtualKey.G, Ctrl, FocusPageBox);
+        // Ctrl+C and Ctrl+A are handled in Scroller_KeyDown instead: as window-wide accelerators
+        // they would win over the search and page boxes' own.
         Add(VirtualKey.Add, Ctrl, () => ZoomStep(+1));
         Add((VirtualKey)187, Ctrl, () => ZoomStep(+1)); // '+' / '=' key
         Add(VirtualKey.Subtract, Ctrl, () => ZoomStep(-1));
@@ -869,6 +1271,34 @@ public sealed partial class MainWindow : Window
             };
             Root.KeyboardAccelerators.Add(accelerator);
         }
+    }
+
+    /// <summary>Copy and select all, while the document has the focus (clicking on it gives it).</summary>
+    void Scroller_KeyDown(object sender, KeyRoutedEventArgs e)
+    {
+        if (!InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down))
+            return;
+        if (e.Key == VirtualKey.C)
+            CopySelection();
+        else if (e.Key == VirtualKey.A)
+            SelectAll();
+        else
+            return;
+        e.Handled = true;
+    }
+
+    void FocusSearch()
+    {
+        if (_doc == null) return;
+        SearchBox.Focus(FocusState.Keyboard);
+        SearchBox.SelectAll();
+    }
+
+    void FocusPageBox()
+    {
+        if (_doc == null) return;
+        PageBox.Focus(FocusState.Keyboard);
+        PageBox.SelectAll();
     }
 
     void ToggleFullScreen()

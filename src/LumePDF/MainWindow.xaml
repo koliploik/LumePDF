@@ -4,6 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:LumePDF"
+    xmlns:viewer="using:LumePDF.Viewer"
     Title="LumePDF">
 
     <Window.SystemBackdrop>
@@ -126,10 +127,31 @@
                 <ScrollViewer x:Name="Scroller" Visibility="Collapsed" IsTabStop="True"
                               HorizontalScrollBarVisibility="Auto" HorizontalScrollMode="Auto"
                               VerticalScrollBarVisibility="Auto" ZoomMode="Disabled"
-                              ViewChanged="Scroller_ViewChanged" SizeChanged="Scroller_SizeChanged">
-                    <Grid x:Name="ScrollContent" Background="Transparent" PointerWheelChanged="ScrollContent_PointerWheelChanged">
+                              ViewChanged="Scroller_ViewChanged" SizeChanged="Scroller_SizeChanged" KeyDown="Scroller_KeyDown">
+                    <!-- Right click; also shown on the start screen, where only "Apri" is left. -->
+                    <ScrollViewer.ContextFlyout>
+                        <MenuFlyout x:Name="ContextMenu" Opening="ContextMenu_Opening">
+                            <MenuFlyoutItem x:Name="CopyItem" Text="Copia" Tag="copy" KeyboardAcceleratorTextOverride="Ctrl+C" Click="ContextMenu_Click" />
+                            <MenuFlyoutItem x:Name="SelectAllItem" Text="Seleziona tutto" Tag="all" KeyboardAcceleratorTextOverride="Ctrl+A" Click="ContextMenu_Click" />
+                            <MenuFlyoutItem x:Name="FindItem" Text="Cerca…" Tag="find" KeyboardAcceleratorTextOverride="Ctrl+F" Click="ContextMenu_Click" />
+                            <MenuFlyoutSeparator />
+                            <MenuFlyoutItem x:Name="ZoomInItem" Text="Ingrandisci" Tag="in" KeyboardAcceleratorTextOverride="Ctrl++" Click="ContextMenu_Click" />
+                            <MenuFlyoutItem x:Name="ZoomOutItem" Text="Riduci" Tag="out" KeyboardAcceleratorTextOverride="Ctrl+-" Click="ContextMenu_Click" />
+                            <MenuFlyoutItem Text="Adatta larghezza" Tag="w" KeyboardAcceleratorTextOverride="Ctrl+1" Click="ContextMenu_Click" />
+                            <MenuFlyoutItem Text="Adatta pagina" Tag="p" KeyboardAcceleratorTextOverride="Ctrl+2" Click="ContextMenu_Click" />
+                            <MenuFlyoutSeparator />
+                            <MenuFlyoutItem Text="Prima pagina" Tag="first" KeyboardAcceleratorTextOverride="Home" Click="ContextMenu_Click" />
+                            <MenuFlyoutItem Text="Ultima pagina" Tag="last" KeyboardAcceleratorTextOverride="Fine" Click="ContextMenu_Click" />
+                            <MenuFlyoutItem Text="Vai a pagina…" Tag="page" KeyboardAcceleratorTextOverride="Ctrl+G" Click="ContextMenu_Click" />
+                            <MenuFlyoutSeparator />
+                            <MenuFlyoutItem x:Name="OpenItem" Text="Apri…" Tag="open" KeyboardAcceleratorTextOverride="Ctrl+O" Click="ContextMenu_Click" />
+                        </MenuFlyout>
+                    </ScrollViewer.ContextFlyout>
+                    <viewer:CursorGrid x:Name="ScrollContent" Background="Transparent" PointerWheelChanged="ScrollContent_PointerWheelChanged"
+                                       PointerPressed="ScrollContent_PointerPressed" PointerMoved="ScrollContent_PointerMoved"
+                                       PointerReleased="ScrollContent_PointerReleased" PointerCaptureLost="ScrollContent_PointerCaptureLost">
                         <ItemsRepeater x:Name="Pages" HorizontalAlignment="Left" VerticalAlignment="Top" VerticalCacheLength="1" />
-                    </Grid>
+                    </viewer:CursorGrid>
                 </ScrollViewer>
 
                 <ScrollViewer x:Name="Welcome" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">

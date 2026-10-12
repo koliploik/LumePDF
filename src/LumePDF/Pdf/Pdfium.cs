@@ -24,6 +24,12 @@ internal static unsafe partial class Pdfium
         public nint Param;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    public struct FsRectF
+    {
+        public float Left, Top, Right, Bottom;
+    }
+
     [LibraryImport(Lib)] public static partial void FPDF_InitLibrary();
     [LibraryImport(Lib)] public static partial uint FPDF_GetLastError();
 
@@ -34,6 +40,7 @@ internal static unsafe partial class Pdfium
 
     [LibraryImport(Lib)] public static partial nint FPDF_LoadPage(nint doc, int index);
     [LibraryImport(Lib)] public static partial void FPDF_ClosePage(nint page);
+    [LibraryImport(Lib)] public static partial int FPDFPage_GetRotation(nint page);
     [LibraryImport(Lib)]
     public static partial int FPDF_PageToDevice(nint page, int startX, int startY, int sizeX, int sizeY, int rotate,
         double pageX, double pageY, int* deviceX, int* deviceY);
@@ -47,6 +54,10 @@ internal static unsafe partial class Pdfium
 
     [LibraryImport(Lib)] public static partial nint FPDFText_LoadPage(nint page);
     [LibraryImport(Lib)] public static partial void FPDFText_ClosePage(nint textPage);
+    [LibraryImport(Lib)] public static partial int FPDFText_CountChars(nint textPage);
+    [LibraryImport(Lib)] public static partial uint FPDFText_GetUnicode(nint textPage, int index);
+    [LibraryImport(Lib)] public static partial int FPDFText_IsGenerated(nint textPage, int index);
+    [LibraryImport(Lib)] public static partial int FPDFText_GetLooseCharBox(nint textPage, int index, FsRectF* rect);
     [LibraryImport(Lib)] public static partial nint FPDFText_FindStart(nint textPage, char* findWhat, uint flags, int startIndex);
     [LibraryImport(Lib)] public static partial int FPDFText_FindNext(nint search);
     [LibraryImport(Lib)] public static partial int FPDFText_GetSchResultIndex(nint search);

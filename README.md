@@ -26,7 +26,7 @@ Windows 11 e usando solo componenti di fonte autorevole:
 - **WinUI 3 / Windows App SDK**, il framework ufficiale Microsoft per le app di Windows 11;
 - **.NET** compilato in **Native AOT**: un unico eseguibile nativo, nessun runtime da installare.
 
-Tutto il resto (circa 1.700 righe di C#) è in questo repository e si legge in un pomeriggio.
+Tutto il resto (circa 2.800 righe di C#) è in questo repository e si legge in un pomeriggio.
 
 ## Funzionalità
 
@@ -35,10 +35,14 @@ Tutto il resto (circa 1.700 righe di C#) è in questo repository e si legge in u
 - Ricerca nel testo con evidenziazione di tutti i risultati, risultato corrente in arancione,
   navigazione avanti/indietro. La ricerca parte dalla pagina che stai leggendo e scorre il
   documento in background senza bloccare l'interfaccia.
+- Selezione e copia del testo come in un browser: trascinamento (anche su più pagine, la vista
+  scorre da sola sul bordo), doppio clic per la parola, triplo clic per la riga, `Ctrl+A`,
+  `Ctrl+C`. Il testo copiato mantiene spazi e a capo.
+- Menu col tasto destro: copia, seleziona tutto, cerca il testo selezionato, zoom, navigazione.
 - Zoom: adatta larghezza, adatta pagina, percentuali, Ctrl + rotellina centrato sul puntatore.
 - Indice (segnalibri del PDF) nella barra laterale.
 - Vai a pagina, PDF protetti da password, pagine ruotate e di formati misti.
-- Ricorda gli ultimi file aperti, con pagina e zoom di ciascuno.
+- Ogni documento si apre dalla prima pagina; ricorda gli ultimi file aperti e lo zoom di ciascuno.
 - Tema chiaro/scuro di sistema, sfondo Mica, barra del titolo integrata, interfaccia che si
   compatta da sola nelle finestre strette, trascina e rilascia per aprire.
 - Il file aperto non viene mai bloccato: puoi modificarlo, spostarlo o cancellarlo mentre è aperto.
@@ -80,6 +84,7 @@ nel PC* › `LumePDF.exe`.
 | Tasti | Azione |
 |---|---|
 | `Ctrl+O` | Apri un file |
+| `Ctrl+C` / `Ctrl+A` | Copia il testo selezionato / seleziona tutto il testo |
 | `Ctrl+F` | Cerca nel documento |
 | `Invio` / `Maiusc+Invio` (nella ricerca) | Risultato successivo / precedente |
 | `F3` / `Maiusc+F3` | Risultato successivo / precedente |
@@ -98,7 +103,8 @@ nel PC* › `LumePDF.exe`.
 LumePDF.exe "documento.pdf" --page 12 --search "parola"
 ```
 
-`--page` apre alla pagina indicata (partendo da 1), `--search` avvia subito una ricerca.
+`--page` apre alla pagina indicata (partendo da 1; senza, dalla prima), `--search` avvia subito
+una ricerca.
 
 ## Privacy e sicurezza
 
@@ -106,7 +112,7 @@ LumePDF.exe "documento.pdf" --page 12 --search "parola"
   è compilato senza JavaScript (V8) e senza XFA: i PDF non possono eseguire codice.
 - **Nessuna telemetria**, nessun account, nessun aggiornamento automatico.
 - Gli unici file che LumePDF scrive sono in `%LOCALAPPDATA%\LumePDF`: `recent.json` (ultimi file
-  aperti, con pagina e zoom) e, solo in caso di errore imprevisto, `crash.log`.
+  aperti, con lo zoom) e, solo in caso di errore imprevisto, `crash.log`.
   Cancellare la cartella azzera tutto.
 - I binari delle release sono compilati da GitHub Actions direttamente da questo codice
   sorgente ([workflow](.github/workflows/build.yml)); ogni release include `SHA256SUMS.txt`.
@@ -139,7 +145,6 @@ lunghezza del documento.
 
 LumePDF è pensato per **leggere**. Per ora non fa:
 
-- selezione e copia del testo;
 - stampa;
 - annotazioni, evidenziazioni, firme, compilazione dei moduli (i moduli già compilati
   vengono comunque visualizzati);
@@ -163,6 +168,9 @@ dotnet run --project src/LumePDF
 
 # Build di rilascio, Native AOT (output in dist/LumePDF)
 dotnet publish src/LumePDF -c Release -r win-x64 -o dist/LumePDF
+
+# Test (layout, testo e selezione, PDFium su PDF reali)
+dotnet test --project tests/LumePDF.Tests
 ```
 
 Ogni push su `main` viene compilato da GitHub Actions per x64 e ARM64; un tag `v*` crea
@@ -173,16 +181,21 @@ automaticamente una release con gli zip.
 ```
 src/LumePDF/
 ├── App.xaml(.cs)            avvio, riga di comando, log degli errori
-├── MainWindow.xaml(.cs)     interfaccia: barra, zoom, ricerca, indice, scorciatoie
+├── MainWindow.xaml(.cs)     interfaccia: barra, zoom, ricerca, selezione, menu, scorciatoie
 ├── Viewer/
-│   ├── PageLayout.cs        layout virtualizzato: posizioni esatte di ogni pagina
-│   └── PageView.cs          una pagina a schermo: bitmap + evidenziazioni
+│   ├── PageGeometry.cs      posizioni esatte di ogni pagina, conversioni schermo ↔ pagina
+│   ├── PageLayout.cs        layout virtualizzato basato su PageGeometry
+│   ├── PageView.cs          una pagina a schermo: bitmap + evidenziazioni + selezione
+│   ├── TextSelection.cs     selezione del testo su più pagine, conteggio dei clic
+│   └── PageMenu.cs          regole del menu col tasto destro
 ├── Pdf/
 │   ├── Pdfium.cs            binding P/Invoke a pdfium.dll
 │   ├── PdfWorker.cs         thread dedicato: PDFium non è thread-safe
-│   └── PdfDocument.cs       apertura, rendering, ricerca, indice
+│   ├── PdfDocument.cs       apertura, rendering, ricerca, testo, indice
+│   └── PageText.cs          testo di una pagina: punto → carattere, parole, righe, testo copiato
 ├── Recents.cs               file recenti (JSON in %LOCALAPPDATA%\LumePDF)
 └── WindowMinSize.cs         dimensione minima della finestra
+tests/LumePDF.Tests/         test xUnit della logica senza finestra e di PDFium su PDF reali
 scripts/register.ps1         associazione ai file .pdf per l'utente corrente
 ```
 
@@ -196,6 +209,8 @@ Scelte principali:
   testo nitido a qualsiasi zoom.
 - Il file viene letto a blocchi tramite l'accesso personalizzato di PDFium, senza caricarlo
   tutto in memoria e senza bloccarlo.
+- Il testo di una pagina (caratteri e posizioni) viene letto solo quando serve, cioè quando il
+  puntatore ci passa sopra o la selezione la tocca, e solo per le pagine vicine alla vista.
 
 ## Licenza
 
