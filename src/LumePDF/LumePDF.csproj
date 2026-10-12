@@ -18,7 +18,7 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <SatelliteResourceLanguages>it;en</SatelliteResourceLanguages>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Product>LumePDF</Product>
     <Description>Lettore PDF leggero</Description>
   </PropertyGroup>
